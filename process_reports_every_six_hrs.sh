@@ -4,20 +4,23 @@
 sender="sender@example.com"
 recipient="recipient@example.com"
 
+# Path to the Outlook CLI tool
+outlook="/usr/bin/outlook"
+
 # Check if there are any new emails from the specified sender
-new_emails=$(grep "^From:.*$sender" /var/spool/mail/user | wc -l)
+new_emails=$("$outlook" search --folder Inbox --sender "$sender" | wc -l)
 
 # Process new emails if any
 if [ "$new_emails" -gt 0 ]; then
 
   # Loop through all new emails from the sender
-  for email in $(grep "^From:.*$sender" /var/spool/mail/user); do
+  for email in $("$outlook" search --folder Inbox --sender "$sender"); do
 
     # Extract the subject of the email
-    subject=$(echo "$email" | awk -F'Subject: ' '{print $2}' | awk -F'\n' '{print $1}')
+    subject=$("$outlook" show --id "$email" --field Subject)
 
     # Extract the attachments of the email
-    attachments=$(echo "$email" | awk '/^--.*$/{x=0}; x; /^Content-Disposition: attachment/{x=1}')
+    attachments=$("$outlook" show --id "$email" --field Attachments)
 
     # Loop through all attachments
     for attachment in "$attachments"; do
@@ -26,10 +29,10 @@ if [ "$new_emails" -gt 0 ]; then
       if [ "${attachment##*.}" == "pl" ]; then
 
         # Replace all tabs with commas in the Perl report
-        echo "$attachment" | awk 'BEGIN{RS="\n\n";FS="\n"} {print $2}' | sed 's/\t/,/g' > "$subject.csv"
+        "$outlook" show --id "$email" --attachment "$attachment" | sed 's/\t/,/g' > "$subject.csv"
 
         # Email the CSV file as an attachment
-        mail -s "Converted report" -a "$subject.csv" "$recipient" <<< "The attached Perl report has been converted to CSV format."
+        "$outlook" send --to "$recipient" --subject "Converted report" --body "The attached Perl report has been converted to CSV format." --attachment "$subject.csv"
 
         # Print success message
         echo "Conversion and email successful."
